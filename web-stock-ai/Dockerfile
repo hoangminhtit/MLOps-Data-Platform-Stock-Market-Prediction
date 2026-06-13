@@ -8,4 +8,4 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . .
 
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
+CMD ["sh", "-c", "rm -rf .next && npm run dev"]

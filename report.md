@@ -145,6 +145,45 @@
 - `news_scraper`: wrote 3 raw news items into ScyllaDB.
 - `news_etl`: loaded 3 news facts into PostgreSQL DW on first run.
 - `GET http://localhost:8080/api/stocks/AAPL/news`: returned warehouse news.
+
+## 2026-06-13 - Phase 5
+
+### Completed
+
+- Added FastAPI WebSocket endpoint `WS /ws/stocks/{symbol}`.
+- Added backend market summary endpoint `GET /api/stocks/analytics/market-summary`.
+- Replaced the placeholder frontend with a realtime stock operations dashboard:
+  - Watchlist.
+  - Latest price cards.
+  - Live WebSocket connection status.
+  - Intraday OHLCV line chart.
+  - Live feed panel.
+  - Warehouse news panel.
+- Kept the UI implementation original while using the referenced stock dashboard only as broad inspiration.
+
+### Verification
+
+- `python -m py_compile` for backend route changes: passed.
+- `docker compose config --quiet`: passed.
+- `docker compose up --build -d backend frontend gateway`: passed.
+- `GET http://localhost:8080`: returned 200.
+- `GET http://localhost:8080/api/stocks/analytics/market-summary`: returned live market summary.
+- `GET http://localhost:8080/api/stocks/AAPL/latest`: returned latest price from `mock-producer`.
+- `WS ws://localhost:8080/ws/stocks/AAPL`: returned realtime latest price JSON through Nginx gateway.
+- `docker compose exec frontend npm run build`: passed.
+
+### Follow-up Fix
+
+- Reorganized `web-stock-ai` into:
+  - `components/dashboard/`
+  - `lib/`
+  - `types/`
+- Fixed direct `localhost:3000` development mode:
+  - Client API calls use `localhost:8080` when opened from port `3000`.
+  - WebSocket calls use `ws://localhost:8080` when opened from port `3000`.
+- Updated frontend Docker command to remove stale `.next` before `next dev`, preventing stale production build assets from causing `/_next/static/*` 404s.
+- Verified `localhost:3000` and `localhost:8080` return 200.
+- Verified Next static assets return 200.
 - Full stack is running with realtime and batch services together.
 - Fixed Kafka topic creation race where producer could fail if processor created `raw_stock_events` first.
 - `GET http://localhost:8080/api/stocks/AAPL/latest`: returned latest price from `mock-producer` after the race fix.
@@ -173,3 +212,29 @@
 - `GET http://localhost:8080/health`: passed.
 - `GET http://localhost:8080/api/stocks/AAPL/latest`: returned realtime price from `mock-producer`.
 - `GET http://localhost:8080/api/stocks/AAPL/news`: returned warehouse news.
+
+## 2026-06-13 - Realtime Dashboard UI Refresh
+
+### Completed
+
+- Improved `web-stock-ai` UI based on `ui.md` while keeping the implementation original.
+- Replaced the dark operations layout with a light fintech dashboard:
+  - Sticky market header.
+  - Home/Stocks/News/Analysis navigation placeholder.
+  - Vietnam realtime clock.
+  - Market open/closed session badge.
+  - Hero search area.
+  - Searchable stock widgets with sparkline.
+  - Realtime connection badge.
+  - Intraday chart, live feed, data source and news panels.
+- Kept frontend structure organized under `web-stock-ai/components/dashboard`.
+- Updated README with the new dashboard component layout and run notes.
+
+### Verification
+
+- `docker compose config --quiet`: passed.
+- `docker compose exec frontend npm run build`: passed.
+- Recreated `frontend` and `gateway` after build to restore Next dev mode cache.
+- `GET http://localhost:3000`: returned 200.
+- `GET http://localhost:8080`: returned 200.
+- Next static assets from `/_next/static/*`: returned 200.

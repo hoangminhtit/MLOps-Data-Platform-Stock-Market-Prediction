@@ -19,6 +19,27 @@ SEED_STOCKS = [
 ]
 
 
+@router.get("/analytics/market-summary")
+async def get_market_summary() -> dict[str, object]:
+    stocks = await list_stocks_from_dw()
+    universe = stocks or SEED_STOCKS
+    latest_items = []
+    for stock in universe:
+        latest = get_latest_price_from_online_store(str(stock["symbol"]))
+        if latest:
+            latest_items.append(latest)
+
+    prices = [item["price"] for item in latest_items if item.get("price") is not None]
+    total_volume = sum(int(item.get("volume") or 0) for item in latest_items)
+    return {
+        "tracked_symbols": len(universe),
+        "live_symbols": len(latest_items),
+        "average_price": round(sum(prices) / len(prices), 2) if prices else None,
+        "total_volume": total_volume,
+        "source": "ScyllaDB latest price store",
+    }
+
+
 @router.get("")
 async def list_stocks() -> dict[str, list[StockSummary]]:
     stocks = await list_stocks_from_dw()

@@ -19,6 +19,10 @@ Phase hiện tại dựng nền tảng chạy được:
 - Batch news pipeline:
   - `news_scraper` ghi raw news vào ScyllaDB.
   - `news_etl` load raw news sang PostgreSQL DW.
+- Realtime web dashboard:
+  - WebSocket `WS /ws/stocks/{symbol}`.
+  - Light fintech UI based on `ui.md`.
+  - Sticky market header, searchable stock widgets, latest price cards, intraday chart, live feed and news panel.
 
 Các phần Airflow orchestration, Flink, MLflow, prediction service và agent service sẽ được thêm theo các phase tiếp theo.
 
@@ -27,6 +31,12 @@ Các phần Airflow orchestration, Flink, MLflow, prediction service và agent s
 ```text
 api-service/          FastAPI backend REST API
 web-stock-ai/         Next.js dashboard
+  app/                Next.js app routes and global styles
+  components/         Reusable UI/dashboard components
+  components/dashboard/
+                      Realtime dashboard, header, chart and stock widgets
+  lib/                API clients and formatting helpers
+  types/              Shared frontend TypeScript types
 kafka-service/        Kafka producer and stream processor
 task-daily-service/   News scraper and ScyllaDB to warehouse ETL
 gateway-service/      Nginx API Gateway config
@@ -71,6 +81,7 @@ Stocks API:         http://localhost:8080/api/stocks
 Latest price API:   http://localhost:8080/api/stocks/AAPL/latest
 Intraday API:       http://localhost:8080/api/stocks/AAPL/intraday
 News API:           http://localhost:8080/api/stocks/AAPL/news
+WebSocket:          ws://localhost:8080/ws/stocks/AAPL
 Backend direct:     http://localhost:8000/health
 Frontend direct:    http://localhost:3000
 PostgreSQL:         localhost:5432
@@ -117,6 +128,12 @@ Kiểm tra OHLCV intraday 1 phút:
 
 ```bash
 curl http://localhost:8080/api/stocks/AAPL/intraday
+```
+
+Frontend dashboard dùng WebSocket qua gateway:
+
+```text
+Browser -> /ws/stocks/{symbol} -> Nginx -> FastAPI WebSocket -> ScyllaDB latest price
 ```
 
 ## News Pipeline
@@ -180,6 +197,43 @@ Nếu muốn xem log realtime:
 ```bash
 docker compose logs -f backend
 ```
+
+## Frontend Notes
+
+Khi phát triển frontend, ưu tiên mở dashboard qua gateway:
+
+```text
+http://localhost:8080
+```
+
+Mở trực tiếp qua Next dev server cũng được hỗ trợ:
+
+```text
+http://localhost:3000
+```
+
+UI realtime hiện được tổ chức trong:
+
+```text
+web-stock-ai/components/dashboard/
+```
+
+Các file chính:
+
+```text
+realtime-dashboard.tsx   Main dashboard container and data wiring
+market-header.tsx        Sticky nav, market session status, Vietnam clock
+stock-widget.tsx         Searchable stock cards with sparkline
+line-chart.tsx           Intraday OHLCV chart
+```
+
+Nếu thấy giao diện bị mất CSS/JS và console báo 404 với `/_next/static/...`, recreate frontend để dọn cache `.next`:
+
+```bash
+docker compose up -d --force-recreate frontend gateway
+```
+
+Không nên chạy `npm run build` bằng `docker compose exec frontend ...` trên container dev đang phục vụ trang. Nếu đã chạy, recreate frontend bằng lệnh trên.
 
 Nếu muốn tạo lại PostgreSQL schema từ đầu:
 

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 
-from app.api.routes import health, stocks
+from app.api.routes import health, stocks, ws
 from app.core.config import settings
 from app.core.logging import configure_logging
 
@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, tags=["health"])
     app.include_router(stocks.router, prefix="/api/stocks", tags=["stocks"])
+    app.include_router(ws.router, tags=["websocket"])
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
