@@ -34,8 +34,10 @@ services:
     volumes:
       - ./logs:/app/logs
     depends_on:
-      - postgres
-      - scylla
+      postgres:
+        condition: service_started
+      scylla_schema_init:
+        condition: service_completed_successfully
     networks:
       - stock_platform
 
@@ -105,8 +107,65 @@ services:
     volumes:
       - ./logs:/app/logs
     depends_on:
-      - kafka
-      - scylla
+      kafka:
+        condition: service_started
+      scylla_schema_init:
+        condition: service_completed_successfully
+    networks:
+      - stock_platform
+
+  news_scraper:
+    build:
+      context: ./batch
+    container_name: stock_news_scraper
+    command: ["python", "-m", "app.scraper.news_scraper"]
+    environment:
+      STOCK_SYMBOLS: ${STOCK_SYMBOLS:-AAPL,MSFT,NVDA}
+      NEWS_SOURCES: ${NEWS_SOURCES:-mock_market_news}
+      NEWS_SCRAPE_INTERVAL_SECONDS: ${NEWS_SCRAPE_INTERVAL_SECONDS:-300}
+      SCYLLA_HOSTS: scylla
+      SCYLLA_KEYSPACE: ${SCYLLA_KEYSPACE:-stock_online_store}
+      SCYLLA_LOCAL_DC: ${SCYLLA_LOCAL_DC:-datacenter1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: /app/logs
+      LOG_FILE_NAME: news_scraper.log
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      scylla_schema_init:
+        condition: service_completed_successfully
+    networks:
+      - stock_platform
+
+  news_etl:
+    build:
+      context: ./batch
+    container_name: stock_news_etl
+    command: ["python", "-m", "app.etl.news_to_warehouse"]
+    environment:
+      NEWS_SOURCES: ${NEWS_SOURCES:-mock_market_news}
+      NEWS_ETL_INTERVAL_SECONDS: ${NEWS_ETL_INTERVAL_SECONDS:-300}
+      NEWS_ETL_START_DELAY_SECONDS: ${NEWS_ETL_START_DELAY_SECONDS:-10}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-stock_dw}
+      POSTGRES_USER: ${POSTGRES_USER:-stock_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stock_password}
+      SCYLLA_HOSTS: scylla
+      SCYLLA_KEYSPACE: ${SCYLLA_KEYSPACE:-stock_online_store}
+      SCYLLA_LOCAL_DC: ${SCYLLA_LOCAL_DC:-datacenter1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: /app/logs
+      LOG_FILE_NAME: news_etl.log
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_started
+      scylla_schema_init:
+        condition: service_completed_successfully
+      news_scraper:
+        condition: service_started
     networks:
       - stock_platform
 
@@ -151,6 +210,19 @@ services:
     volumes:
       - scylla_data:/var/lib/scylla
       - ./scylla/init:/schema:ro
+    networks:
+      - stock_platform
+
+  scylla_schema_init:
+    image: scylladb/scylla:6.2
+    container_name: stock_scylla_schema_init
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - "until cqlsh scylla 9042 -f /schema/001_online_store.cql; do echo 'Waiting for ScyllaDB schema init'; sleep 5; done"
+    volumes:
+      - ./scylla/init:/schema:ro
+    depends_on:
+      - scylla
     networks:
       - stock_platform
 

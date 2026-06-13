@@ -16,8 +16,11 @@ Phase hiện tại dựng nền tảng chạy được:
 - Kafka-compatible realtime stock pipeline:
   - `stock_producer` phát mock stock ticks vào topic `raw_stock_events`.
   - `stream_processor` consume topic và ghi raw/latest/OHLCV 1 phút vào ScyllaDB.
+- Batch news pipeline:
+  - `news_scraper` ghi raw news vào ScyllaDB.
+  - `news_etl` load raw news sang PostgreSQL DW.
 
-Các phần Flink, Airflow, MLflow, prediction service và agent service sẽ được thêm theo các phase tiếp theo.
+Các phần Airflow orchestration, Flink, MLflow, prediction service và agent service sẽ được thêm theo các phase tiếp theo.
 
 ## Project Structure
 
@@ -25,6 +28,7 @@ Các phần Flink, Airflow, MLflow, prediction service và agent service sẽ đ
 backend/          FastAPI backend
 frontend/         Next.js dashboard
 streaming/        Kafka producer and stream processor
+batch/            News scraper and ScyllaDB to warehouse ETL
 nginx/            API Gateway config
 postgres/init/    PostgreSQL star schema bootstrap
 scylla/init/      ScyllaDB online store schema
@@ -65,6 +69,7 @@ Backend health:     http://localhost:8080/health
 Stocks API:         http://localhost:8080/api/stocks
 Latest price API:   http://localhost:8080/api/stocks/AAPL/latest
 Intraday API:       http://localhost:8080/api/stocks/AAPL/intraday
+News API:           http://localhost:8080/api/stocks/AAPL/news
 Backend direct:     http://localhost:8000/health
 Frontend direct:    http://localhost:3000
 PostgreSQL:         localhost:5432
@@ -74,7 +79,9 @@ Kafka external:     localhost:9094
 
 ## Initialize ScyllaDB Schema
 
-PostgreSQL tự chạy schema trong `postgres/init` khi volume mới được tạo. ScyllaDB không tự chạy CQL từ compose, nên sau khi Scylla sẵn sàng, chạy:
+PostgreSQL tự chạy schema trong `postgres/init` khi volume mới được tạo. ScyllaDB schema được service `scylla_schema_init` tự apply khi chạy Docker Compose.
+
+Nếu cần apply thủ công:
 
 ```bash
 docker exec -it stock_scylla cqlsh -f /schema/001_online_store.cql
@@ -88,6 +95,7 @@ Docker Compose chạy thêm 3 service:
 
 ```text
 kafka                  Kafka broker
+scylla_schema_init     applies ScyllaDB CQL schema
 stock_producer         mock stock event producer
 stream_processor       Kafka -> ScyllaDB writer
 ```
@@ -110,6 +118,29 @@ Kiểm tra OHLCV intraday 1 phút:
 curl http://localhost:8080/api/stocks/AAPL/intraday
 ```
 
+## News Pipeline
+
+Docker Compose chạy thêm 2 service:
+
+```text
+news_scraper       mock news scraper -> ScyllaDB raw_news
+news_etl           ScyllaDB raw_news -> PostgreSQL fact_stock_news
+```
+
+Luồng hiện tại:
+
+```text
+news_scraper -> ScyllaDB raw_news -> news_etl -> PostgreSQL DW -> Backend API
+```
+
+Kiểm tra news đã vào warehouse:
+
+```bash
+curl http://localhost:8080/api/stocks/AAPL/news
+```
+
+MVP hiện dùng synthetic mock news để pipeline chạy ổn định trong local. RSS/API thật sẽ được thay vào sau khi Airflow orchestration được thêm.
+
 ## Seed PostgreSQL Data
 
 Nếu bạn tạo volume mới, PostgreSQL tự chạy `postgres/init/001_star_schema.sql` và `postgres/init/002_seed_data.sql`.
@@ -128,6 +159,8 @@ docker compose logs -f backend
 docker compose logs -f gateway
 docker compose logs -f stock_producer
 docker compose logs -f stream_processor
+docker compose logs -f news_scraper
+docker compose logs -f news_etl
 docker compose down
 ```
 
@@ -137,6 +170,8 @@ Backend cũng ghi log file tại:
 logs/backend.log
 logs/producer.log
 logs/stream_processor.log
+logs/news_scraper.log
+logs/news_etl.log
 ```
 
 Nếu muốn xem log realtime:

@@ -2,7 +2,7 @@ import logging
 import time
 from collections.abc import Callable
 
-from confluent_kafka import Consumer, KafkaException, Producer
+from confluent_kafka import Consumer, KafkaError, KafkaException, Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 
 from app.core.config import settings
@@ -58,6 +58,16 @@ def ensure_topic(topic: str) -> None:
     try:
         futures[topic].result(timeout=30)
         logger.info("Created Kafka topic: %s", topic)
+    except KafkaException as exc:
+        error = exc.args[0] if exc.args else None
+        if error is not None and error.code() == KafkaError.TOPIC_ALREADY_EXISTS:
+            logger.info("Kafka topic already exists after create race: %s", topic)
+            return
+        metadata = admin.list_topics(timeout=10)
+        if topic in metadata.topics:
+            logger.info("Kafka topic exists after create race: %s", topic)
+            return
+        raise RuntimeError(f"Failed to create Kafka topic {topic}") from exc
     except Exception as exc:
         metadata = admin.list_topics(timeout=10)
         if topic in metadata.topics:

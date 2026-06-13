@@ -110,3 +110,41 @@
 - Log files created:
   - `logs/producer.log`
   - `logs/stream_processor.log`
+
+## 2026-06-13 - Phase 4
+
+### Completed
+
+- Added `batch/` package for batch-oriented jobs.
+- Added `news_scraper` service:
+  - Generates deterministic mock news for `AAPL`, `MSFT`, and `NVDA`.
+  - Writes raw news to ScyllaDB `raw_news`.
+  - Writes logs to `logs/news_scraper.log`.
+- Added `news_etl` service:
+  - Reads ScyllaDB `raw_news`.
+  - Upserts `dim_date` and `dim_news_source`.
+  - Loads stock-linked articles into PostgreSQL `fact_stock_news`.
+  - Applies a simple keyword-based sentiment score.
+  - Writes logs to `logs/news_etl.log`.
+- Added backend repository for stock news from PostgreSQL DW.
+- Added backend endpoint `GET /api/stocks/{symbol}/news`.
+- Added `scylla_schema_init` service so ScyllaDB CQL schema is applied automatically during Compose startup.
+- Added a configurable `NEWS_ETL_START_DELAY_SECONDS` to avoid first-run races with the scraper.
+- Updated README with News Pipeline run/debug commands.
+
+### Notes
+
+- This is an Airflow-lite implementation for MVP validation. The jobs are long-running containers now; Airflow DAGs should orchestrate the same logic later.
+- News data is synthetic by default to keep local dev deterministic and independent of external RSS/API availability.
+
+### Verification
+
+- `docker compose config --quiet`: passed.
+- `python -m py_compile` for backend and batch files: passed.
+- `scylla_schema_init`: completed successfully and applied CQL schema.
+- `news_scraper`: wrote 3 raw news items into ScyllaDB.
+- `news_etl`: loaded 3 news facts into PostgreSQL DW on first run.
+- `GET http://localhost:8080/api/stocks/AAPL/news`: returned warehouse news.
+- Full stack is running with realtime and batch services together.
+- Fixed Kafka topic creation race where producer could fail if processor created `raw_stock_events` first.
+- `GET http://localhost:8080/api/stocks/AAPL/latest`: returned latest price from `mock-producer` after the race fix.

@@ -2,12 +2,13 @@ from datetime import UTC, date, datetime
 
 from fastapi import APIRouter
 
+from app.repositories.postgres_news import list_stock_news
 from app.repositories.postgres_stocks import get_stock, list_stocks as list_stocks_from_dw
 from app.repositories.scylla_prices import (
     get_intraday_bars,
     get_latest_price as get_latest_price_from_online_store,
 )
-from app.schemas.stocks import IntradayBar, LatestPrice, StockSummary
+from app.schemas.stocks import IntradayBar, LatestPrice, StockNews, StockSummary
 
 router = APIRouter()
 
@@ -54,3 +55,10 @@ async def get_intraday(symbol: str, event_date: date | None = None, limit: int =
     safe_limit = max(1, min(limit, 500))
     bars = get_intraday_bars(symbol, target_date, safe_limit)
     return {"items": bars}
+
+
+@router.get("/{symbol}/news")
+async def get_news(symbol: str, limit: int = 50) -> dict[str, list[StockNews]]:
+    safe_limit = max(1, min(limit, 200))
+    news = await list_stock_news(symbol, safe_limit)
+    return {"items": news}

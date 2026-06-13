@@ -28,3 +28,13 @@ class IntradayBar(BaseModel):
     low_price: float
     close_price: float
     volume: int
+
+
+class StockNews(BaseModel):
+    symbol: str
+    source: str | None = None
+    published_at: str | None = None
+    title: str
+    content: str | None = None
+    url: str | None = None
+    sentiment_score: float | None = None
