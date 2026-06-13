@@ -1,6 +1,6 @@
 # MLOps Data Platform - Stock Market
 
-Monorepo cho nền tảng dữ liệu thị trường chứng khoán theo kiến trúc trong `architecture.png` và `plan(2).md`.
+Monorepo cho nền tảng dữ liệu thị trường chứng khoán theo kiến trúc trong `image/architecture.png` và `plan(2).md`.
 
 ## Current Scope
 
@@ -25,15 +25,16 @@ Các phần Airflow orchestration, Flink, MLflow, prediction service và agent s
 ## Project Structure
 
 ```text
-backend/          FastAPI backend
-frontend/         Next.js dashboard
-streaming/        Kafka producer and stream processor
-batch/            News scraper and ScyllaDB to warehouse ETL
-nginx/            API Gateway config
-postgres/init/    PostgreSQL star schema bootstrap
-scylla/init/      ScyllaDB online store schema
-docs/             Design notes and follow-up docs
-logs/            Local debug logs mounted from backend container
+api-service/          FastAPI backend REST API
+web-stock-ai/         Next.js dashboard
+kafka-service/        Kafka producer and stream processor
+task-daily-service/   News scraper and ScyllaDB to warehouse ETL
+gateway-service/      Nginx API Gateway config
+warehouse/init/       PostgreSQL star schema bootstrap
+scylla-service/init/  ScyllaDB online store schema
+image/                Architecture image and visual assets
+docs/                 Design notes and follow-up docs
+logs/                 Local debug logs mounted from containers
 docker-compose.yml
 .env.example
 report.md
@@ -79,7 +80,7 @@ Kafka external:     localhost:9094
 
 ## Initialize ScyllaDB Schema
 
-PostgreSQL tự chạy schema trong `postgres/init` khi volume mới được tạo. ScyllaDB schema được service `scylla_schema_init` tự apply khi chạy Docker Compose.
+PostgreSQL tự chạy schema trong `warehouse/init` khi volume mới được tạo. ScyllaDB schema được service `scylla_schema_init` tự apply khi chạy Docker Compose.
 
 Nếu cần apply thủ công:
 
@@ -143,7 +144,7 @@ MVP hiện dùng synthetic mock news để pipeline chạy ổn định trong lo
 
 ## Seed PostgreSQL Data
 
-Nếu bạn tạo volume mới, PostgreSQL tự chạy `postgres/init/001_star_schema.sql` và `postgres/init/002_seed_data.sql`.
+Nếu bạn tạo volume mới, PostgreSQL tự chạy `warehouse/init/001_star_schema.sql` và `warehouse/init/002_seed_data.sql`.
 
 Nếu stack đã chạy từ phase trước và volume PostgreSQL đã tồn tại, apply seed thủ công:
 

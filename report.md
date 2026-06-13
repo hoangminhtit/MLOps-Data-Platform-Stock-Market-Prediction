@@ -29,7 +29,7 @@
 
 - This is Phase 0/1 foundation work. Kafka, Flink, Airflow, MLflow, prediction service, monitoring and agents are not implemented yet.
 - PostgreSQL schema is auto-applied by the official Docker image on first volume creation.
-- ScyllaDB schema is provided in `scylla/init/001_online_store.cql` and must be applied with `cqlsh` after Scylla starts.
+- ScyllaDB schema is provided in `scylla-service/init/001_online_store.cql` and must be applied with `cqlsh` after Scylla starts.
 
 ### Next Suggested Step
 
@@ -51,8 +51,8 @@
   - `GET /api/stocks` reads PostgreSQL DW first, then falls back to seed data.
   - `GET /api/stocks/{symbol}` returns stock profile from PostgreSQL or fallback seed data.
   - `GET /api/stocks/{symbol}/latest` reads ScyllaDB latest price or returns an empty placeholder response.
-- Added PostgreSQL seed file `postgres/init/002_seed_data.sql` for `AAPL`, `MSFT`, and `NVDA`.
-- Added sample ScyllaDB latest price seed statements to `scylla/init/001_online_store.cql`.
+- Added PostgreSQL seed file `warehouse/init/002_seed_data.sql` for `AAPL`, `MSFT`, and `NVDA`.
+- Added sample ScyllaDB latest price seed statements to `scylla-service/init/001_online_store.cql`.
 - Configured ScyllaDB client protocol and local datacenter settings to reduce noisy driver warnings.
 - Updated README with logs, seed, and run instructions.
 
@@ -76,7 +76,7 @@
 ### Completed
 
 - Added Kafka broker service to Docker Compose.
-- Added `streaming/` package for realtime data pipeline code.
+- Added `kafka-service/` package for realtime data pipeline code.
 - Added `stock_producer` service:
   - Produces mock JSON stock tick events for `AAPL`, `MSFT`, and `NVDA`.
   - Uses Kafka key `symbol` to keep per-symbol event ordering.
@@ -115,7 +115,7 @@
 
 ### Completed
 
-- Added `batch/` package for batch-oriented jobs.
+- Added `task-daily-service/` package for batch-oriented jobs.
 - Added `news_scraper` service:
   - Generates deterministic mock news for `AAPL`, `MSFT`, and `NVDA`.
   - Writes raw news to ScyllaDB `raw_news`.
@@ -148,3 +148,28 @@
 - Full stack is running with realtime and batch services together.
 - Fixed Kafka topic creation race where producer could fail if processor created `raw_stock_events` first.
 - `GET http://localhost:8080/api/stocks/AAPL/latest`: returned latest price from `mock-producer` after the race fix.
+
+## 2026-06-13 - Structure Refactor
+
+### Completed
+
+- Reorganized root folders into service-oriented boundaries:
+  - `api-service/`
+  - `web-stock-ai/`
+  - `kafka-service/`
+  - `task-daily-service/`
+  - `gateway-service/`
+  - `warehouse/`
+  - `scylla-service/`
+  - `image/`
+- Updated Docker Compose build contexts and mounted schema/config paths.
+- Updated README and architecture notes to reflect the new layout.
+
+### Verification
+
+- `docker compose config --quiet`: passed.
+- `python -m py_compile` with new service paths: passed.
+- Rebuilt and started services from the new folder layout.
+- `GET http://localhost:8080/health`: passed.
+- `GET http://localhost:8080/api/stocks/AAPL/latest`: returned realtime price from `mock-producer`.
+- `GET http://localhost:8080/api/stocks/AAPL/news`: returned warehouse news.
