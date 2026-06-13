@@ -11,5 +11,7 @@ dist/
 build/
 coverage/
 *.log
+logs/*.log
+!logs/.gitkeep
 postgres_data/
 scylla_data/

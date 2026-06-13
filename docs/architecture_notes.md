@@ -1,6 +1,6 @@
 # Architecture Notes
 
-These notes capture the system architecture reviewed from `architecture.png` and `plan(2).md`.
+These notes capture the system architecture reviewed from `image/architecture.png` and `plan(2).md`.
 
 ## Main Pipelines
 
