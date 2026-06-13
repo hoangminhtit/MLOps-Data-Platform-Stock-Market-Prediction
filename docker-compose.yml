@@ -26,10 +26,86 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stock_password}
       SCYLLA_HOSTS: scylla
       SCYLLA_KEYSPACE: ${SCYLLA_KEYSPACE:-stock_online_store}
+      SCYLLA_LOCAL_DC: ${SCYLLA_LOCAL_DC:-datacenter1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: /app/logs
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./logs:/app/logs
     depends_on:
       - postgres
+      - scylla
+    networks:
+      - stock_platform
+
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: stock_kafka
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:${KAFKA_EXTERNAL_PORT:-9094}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: ${KAFKA_NUM_PARTITIONS:-3}
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    ports:
+      - "${KAFKA_EXTERNAL_PORT:-9094}:9094"
+    volumes:
+      - kafka_data:/tmp/kraft-combined-logs
+    networks:
+      - stock_platform
+
+  stock_producer:
+    build:
+      context: ./streaming
+    container_name: stock_producer
+    command: ["python", "-m", "app.producer.mock_stock_producer"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_RAW_STOCK_TOPIC: ${KAFKA_RAW_STOCK_TOPIC:-raw_stock_events}
+      KAFKA_NUM_PARTITIONS: ${KAFKA_NUM_PARTITIONS:-3}
+      STOCK_SYMBOLS: ${STOCK_SYMBOLS:-AAPL,MSFT,NVDA}
+      PRODUCER_INTERVAL_SECONDS: ${PRODUCER_INTERVAL_SECONDS:-2}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: /app/logs
+      LOG_FILE_NAME: producer.log
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - kafka
+    networks:
+      - stock_platform
+
+  stream_processor:
+    build:
+      context: ./streaming
+    container_name: stock_stream_processor
+    command: ["python", "-m", "app.processor.kafka_to_scylla"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_RAW_STOCK_TOPIC: ${KAFKA_RAW_STOCK_TOPIC:-raw_stock_events}
+      KAFKA_NUM_PARTITIONS: ${KAFKA_NUM_PARTITIONS:-3}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-stock-scylla-writer}
+      SCYLLA_HOSTS: scylla
+      SCYLLA_KEYSPACE: ${SCYLLA_KEYSPACE:-stock_online_store}
+      SCYLLA_LOCAL_DC: ${SCYLLA_LOCAL_DC:-datacenter1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: /app/logs
+      LOG_FILE_NAME: stream_processor.log
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - kafka
       - scylla
     networks:
       - stock_platform
@@ -81,6 +157,7 @@ services:
 volumes:
   postgres_data:
   scylla_data:
+  kafka_data:
 
 networks:
   stock_platform:

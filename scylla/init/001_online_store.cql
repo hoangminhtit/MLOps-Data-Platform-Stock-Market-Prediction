@@ -54,3 +54,12 @@ CREATE TABLE IF NOT EXISTS raw_company_info (
     profile text,
     updated_at timestamp
 );
+
+INSERT INTO stock_latest_prices (symbol, price, volume, event_time, source)
+VALUES ('AAPL', 195.12, 1023400, toTimestamp(now()), 'seed');
+
+INSERT INTO stock_latest_prices (symbol, price, volume, event_time, source)
+VALUES ('MSFT', 421.45, 884200, toTimestamp(now()), 'seed');
+
+INSERT INTO stock_latest_prices (symbol, price, volume, event_time, source)
+VALUES ('NVDA', 138.76, 2100500, toTimestamp(now()), 'seed');
