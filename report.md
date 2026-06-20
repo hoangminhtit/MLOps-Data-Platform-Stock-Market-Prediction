@@ -238,3 +238,34 @@
 - `GET http://localhost:3000`: returned 200.
 - `GET http://localhost:8080`: returned 200.
 - Next static assets from `/_next/static/*`: returned 200.
+
+## 2026-06-20 - Phase 6 Batch ETL Warehouse
+
+### Completed
+
+- Added `stock_price_etl` service for warehouse stock price loading.
+- Added ETL job `app.etl.stock_prices_to_warehouse`:
+  - Reads 1-minute OHLCV bars from ScyllaDB `stock_ohlcv_1m`.
+  - Upserts intraday rows into PostgreSQL `fact_stock_intraday_prices`.
+  - Aggregates daily OHLCV into PostgreSQL `fact_stock_daily_prices`.
+  - Creates the intraday unique index if an existing volume is missing it.
+  - Writes logs to `logs/stock_etl.log`.
+- Added warehouse unique index for `(stock_id, event_time)` on intraday prices.
+- Added backend PostgreSQL analytics repository.
+- Added API endpoints:
+  - `GET /api/stocks/{symbol}/daily`.
+  - `GET /api/stocks/analytics/top-gainers`.
+  - `GET /api/stocks/analytics/top-losers`.
+  - `GET /api/stocks/analytics/high-volume`.
+- Updated `.env.example`, Docker Compose and README.
+
+### Verification
+
+- `python -m py_compile` for new backend and batch ETL files: passed.
+- `docker compose config --quiet`: passed.
+- `docker compose up --build -d backend stock_price_etl`: passed.
+- `stock_price_etl`: loaded 3 symbols, intraday rows and 3 daily rows into PostgreSQL DW.
+- `GET http://localhost:8080/api/stocks/AAPL/daily`: returned warehouse daily OHLCV.
+- `GET http://localhost:8080/api/stocks/analytics/top-gainers`: returned warehouse movers.
+- `GET http://localhost:8080/api/stocks/analytics/top-losers`: returned warehouse movers.
+- `GET http://localhost:8080/api/stocks/analytics/high-volume`: returned warehouse volume ranking.

@@ -3,12 +3,17 @@ from datetime import UTC, date, datetime
 from fastapi import APIRouter
 
 from app.repositories.postgres_news import list_stock_news
+from app.repositories.postgres_analytics import (
+    list_daily_prices,
+    list_high_volume,
+    list_top_movers,
+)
 from app.repositories.postgres_stocks import get_stock, list_stocks as list_stocks_from_dw
 from app.repositories.scylla_prices import (
     get_intraday_bars,
     get_latest_price as get_latest_price_from_online_store,
 )
-from app.schemas.stocks import IntradayBar, LatestPrice, StockNews, StockSummary
+from app.schemas.stocks import DailyPrice, HighVolumeStock, IntradayBar, LatestPrice, StockMover, StockNews, StockSummary
 
 router = APIRouter()
 
@@ -38,6 +43,27 @@ async def get_market_summary() -> dict[str, object]:
         "total_volume": total_volume,
         "source": "ScyllaDB latest price store",
     }
+
+
+@router.get("/analytics/top-gainers")
+async def get_top_gainers(limit: int = 5) -> dict[str, list[StockMover]]:
+    safe_limit = max(1, min(limit, 20))
+    items = await list_top_movers("gainers", safe_limit)
+    return {"items": items}
+
+
+@router.get("/analytics/top-losers")
+async def get_top_losers(limit: int = 5) -> dict[str, list[StockMover]]:
+    safe_limit = max(1, min(limit, 20))
+    items = await list_top_movers("losers", safe_limit)
+    return {"items": items}
+
+
+@router.get("/analytics/high-volume")
+async def get_high_volume(limit: int = 5) -> dict[str, list[HighVolumeStock]]:
+    safe_limit = max(1, min(limit, 20))
+    items = await list_high_volume(safe_limit)
+    return {"items": items}
 
 
 @router.get("")
@@ -76,6 +102,13 @@ async def get_intraday(symbol: str, event_date: date | None = None, limit: int =
     safe_limit = max(1, min(limit, 500))
     bars = get_intraday_bars(symbol, target_date, safe_limit)
     return {"items": bars}
+
+
+@router.get("/{symbol}/daily")
+async def get_daily(symbol: str, limit: int = 30) -> dict[str, list[DailyPrice]]:
+    safe_limit = max(1, min(limit, 365))
+    prices = await list_daily_prices(symbol, safe_limit)
+    return {"items": prices}
 
 
 @router.get("/{symbol}/news")

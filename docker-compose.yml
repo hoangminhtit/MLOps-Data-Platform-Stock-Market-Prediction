@@ -169,6 +169,38 @@ services:
     networks:
       - stock_platform
 
+  stock_price_etl:
+    build:
+      context: ./task-daily-service
+    container_name: stock_price_etl
+    command: ["python", "-m", "app.etl.stock_prices_to_warehouse"]
+    environment:
+      STOCK_SYMBOLS: ${STOCK_SYMBOLS:-AAPL,MSFT,NVDA}
+      STOCK_ETL_INTERVAL_SECONDS: ${STOCK_ETL_INTERVAL_SECONDS:-300}
+      STOCK_ETL_START_DELAY_SECONDS: ${STOCK_ETL_START_DELAY_SECONDS:-15}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-stock_dw}
+      POSTGRES_USER: ${POSTGRES_USER:-stock_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stock_password}
+      SCYLLA_HOSTS: scylla
+      SCYLLA_KEYSPACE: ${SCYLLA_KEYSPACE:-stock_online_store}
+      SCYLLA_LOCAL_DC: ${SCYLLA_LOCAL_DC:-datacenter1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: /app/logs
+      LOG_FILE_NAME: stock_etl.log
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_started
+      scylla_schema_init:
+        condition: service_completed_successfully
+      stream_processor:
+        condition: service_started
+    networks:
+      - stock_platform
+
   frontend:
     build:
       context: ./web-stock-ai

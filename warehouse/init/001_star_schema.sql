@@ -60,6 +60,9 @@ CREATE TABLE IF NOT EXISTS fact_stock_intraday_prices (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fact_stock_intraday_prices_stock_time
+ON fact_stock_intraday_prices (stock_id, event_time);
+
 CREATE TABLE IF NOT EXISTS fact_stock_news (
     id BIGSERIAL PRIMARY KEY,
     stock_id INT REFERENCES dim_stock(stock_id),

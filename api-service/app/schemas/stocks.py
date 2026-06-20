@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import BaseModel
 
 
@@ -38,3 +40,29 @@ class StockNews(BaseModel):
     content: str | None = None
     url: str | None = None
     sentiment_score: float | None = None
+
+
+class DailyPrice(BaseModel):
+    symbol: str
+    price_date: date
+    open_price: float | None = None
+    high_price: float | None = None
+    low_price: float | None = None
+    close_price: float | None = None
+    volume: int | None = None
+
+
+class StockMover(BaseModel):
+    symbol: str
+    name: str | None = None
+    open_price: float | None = None
+    close_price: float | None = None
+    volume: int | None = None
+    change_percent: float | None = None
+
+
+class HighVolumeStock(BaseModel):
+    symbol: str
+    name: str | None = None
+    close_price: float | None = None
+    volume: int | None = None

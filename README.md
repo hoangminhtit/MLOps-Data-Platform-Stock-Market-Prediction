@@ -19,6 +19,9 @@ Phase hiện tại dựng nền tảng chạy được:
 - Batch news pipeline:
   - `news_scraper` ghi raw news vào ScyllaDB.
   - `news_etl` load raw news sang PostgreSQL DW.
+- Batch warehouse stock ETL:
+  - `stock_price_etl` load ScyllaDB OHLCV 1 phút sang PostgreSQL DW.
+  - Aggregate daily OHLCV vào `fact_stock_daily_prices`.
 - Realtime web dashboard:
   - WebSocket `WS /ws/stocks/{symbol}`.
   - Light fintech UI based on `ui.md`.
@@ -80,7 +83,11 @@ Backend health:     http://localhost:8080/health
 Stocks API:         http://localhost:8080/api/stocks
 Latest price API:   http://localhost:8080/api/stocks/AAPL/latest
 Intraday API:       http://localhost:8080/api/stocks/AAPL/intraday
+Daily API:          http://localhost:8080/api/stocks/AAPL/daily
 News API:           http://localhost:8080/api/stocks/AAPL/news
+Top gainers API:    http://localhost:8080/api/stocks/analytics/top-gainers
+Top losers API:     http://localhost:8080/api/stocks/analytics/top-losers
+High volume API:    http://localhost:8080/api/stocks/analytics/high-volume
 WebSocket:          ws://localhost:8080/ws/stocks/AAPL
 Backend direct:     http://localhost:8000/health
 Frontend direct:    http://localhost:3000
@@ -159,6 +166,36 @@ curl http://localhost:8080/api/stocks/AAPL/news
 
 MVP hiện dùng synthetic mock news để pipeline chạy ổn định trong local. RSS/API thật sẽ được thay vào sau khi Airflow orchestration được thêm.
 
+## Stock Warehouse ETL
+
+Docker Compose chạy thêm service:
+
+```text
+stock_price_etl    ScyllaDB stock_ohlcv_1m -> PostgreSQL intraday/daily facts
+```
+
+Luồng hiện tại:
+
+```text
+stream_processor -> ScyllaDB stock_ohlcv_1m -> stock_price_etl -> PostgreSQL DW
+```
+
+Kiểm tra daily price đã vào warehouse:
+
+```bash
+curl http://localhost:8080/api/stocks/AAPL/daily
+```
+
+Kiểm tra analytics đọc từ warehouse:
+
+```bash
+curl http://localhost:8080/api/stocks/analytics/top-gainers
+curl http://localhost:8080/api/stocks/analytics/top-losers
+curl http://localhost:8080/api/stocks/analytics/high-volume
+```
+
+MVP hiện dùng job container chạy định kỳ để chứng minh logic ETL. Khi thêm Airflow, DAG `stock_daily_etl_dag` sẽ gọi lại cùng luồng extract/transform/load này.
+
 ## Seed PostgreSQL Data
 
 Nếu bạn tạo volume mới, PostgreSQL tự chạy `warehouse/init/001_star_schema.sql` và `warehouse/init/002_seed_data.sql`.
@@ -179,6 +216,7 @@ docker compose logs -f stock_producer
 docker compose logs -f stream_processor
 docker compose logs -f news_scraper
 docker compose logs -f news_etl
+docker compose logs -f stock_price_etl
 docker compose down
 ```
 
@@ -190,6 +228,7 @@ logs/producer.log
 logs/stream_processor.log
 logs/news_scraper.log
 logs/news_etl.log
+logs/stock_etl.log
 ```
 
 Nếu muốn xem log realtime:
