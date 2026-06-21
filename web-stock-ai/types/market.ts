@@ -35,6 +35,17 @@ export type StockNews = {
   sentiment_score: number | null;
 };
 
+export type StockPrediction = {
+  symbol: string;
+  prediction_date: string;
+  target_date: string;
+  predicted_close: number | null;
+  confidence: number | null;
+  model_name: string | null;
+  model_version: string | null;
+  created_at: string | null;
+};
+
 export type MarketSummary = {
   tracked_symbols: number;
   live_symbols: number;
@@ -45,7 +56,9 @@ export type MarketSummary = {
 
 export type InitialDashboardData = {
   stocks: Stock[];
+  latestPrices: LatestPrice[];
   summary: MarketSummary | null;
   news: StockNews[];
   intraday: IntradayBar[];
+  predictions: StockPrediction[];
 };

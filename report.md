@@ -238,3 +238,166 @@
 - `GET http://localhost:3000`: returned 200.
 - `GET http://localhost:8080`: returned 200.
 - Next static assets from `/_next/static/*`: returned 200.
+
+## 2026-06-21 - Light Theme and Live Symbol Charts
+
+### Completed
+
+- Switched the Next.js dashboard from a dark palette to a lighter Tailwind token theme.
+- Replaced hard-coded dark UI text colors with semantic theme colors so cards, tables, controls and charts work on the light background.
+- Renamed the main navigation to English:
+  - Home.
+  - Stocks.
+  - News.
+  - Analytics.
+- Updated dashboard data wiring so `GET /api/stocks/latest` updates both latest prices and per-symbol price history.
+- Stock widgets now build mini charts for every streaming symbol after live ticks arrive, not only the selected symbol.
+- Stock board rows continue to read latest price and volume from ScyllaDB streaming rows.
+- Cleaned frontend text/metadata to English and removed prior mojibake strings from the active UI components.
+- Updated README with the current frontend run/build instructions.
+
+### Verification
+
+- `python -m py_compile api-service/app/api/routes/stocks.py api-service/app/repositories/scylla_prices.py`: passed.
+- `docker compose config --quiet`: passed.
+- `docker compose run --rm frontend npm run build`: passed.
+- `npm run build` in `web-stock-ai`: passed after running outside the sandbox because local Windows spawn was blocked.
+- `docker compose up --build -d frontend gateway`: passed.
+- `GET http://localhost:8080`: returned 200.
+- `GET http://localhost:8080/api/stocks/latest`: returned streaming rows with `source=mock-producer`.
+- Next static asset through the gateway returned 200.
+- Rendered HTML contains `lang="en"` and English navigation labels.
+
+## 2026-06-21 - Sparkline Scale Adjustment
+
+### Completed
+
+- Fixed stock-card sparklines that looked overly zoomed because each card scaled the line directly from its local min/max.
+- Added a minimum visible price range around the anchor price so tiny moves, for example `+0.03%`, render as subtle movement instead of a full-height ramp.
+- Kept the detailed intraday chart separate from card sparkline history, so clicking a symbol no longer replaces the card's live mini-chart with a differently scaled intraday series.
+
+### Verification
+
+- `npm run build` in `web-stock-ai`: passed.
+- `docker compose up --build -d frontend gateway`: passed.
+- `GET http://localhost:8080`: returned 200.
+- `GET http://localhost:8080/api/stocks/latest`: returned 200.
+
+## 2026-06-20 - Phase 6 Batch ETL Warehouse
+
+### Completed
+
+- Added `stock_price_etl` service for warehouse stock price loading.
+- Added ETL job `app.etl.stock_prices_to_warehouse`:
+  - Reads 1-minute OHLCV bars from ScyllaDB `stock_ohlcv_1m`.
+  - Upserts intraday rows into PostgreSQL `fact_stock_intraday_prices`.
+  - Aggregates daily OHLCV into PostgreSQL `fact_stock_daily_prices`.
+  - Creates the intraday unique index if an existing volume is missing it.
+  - Writes logs to `logs/stock_etl.log`.
+- Added warehouse unique index for `(stock_id, event_time)` on intraday prices.
+- Added backend PostgreSQL analytics repository.
+- Added API endpoints:
+  - `GET /api/stocks/{symbol}/daily`.
+  - `GET /api/stocks/analytics/top-gainers`.
+  - `GET /api/stocks/analytics/top-losers`.
+  - `GET /api/stocks/analytics/high-volume`.
+- Updated `.env.example`, Docker Compose and README.
+
+### Verification
+
+- `python -m py_compile` for new backend and batch ETL files: passed.
+- `docker compose config --quiet`: passed.
+- `docker compose up --build -d backend stock_price_etl`: passed.
+- `stock_price_etl`: loaded 3 symbols, intraday rows and 3 daily rows into PostgreSQL DW.
+- `GET http://localhost:8080/api/stocks/AAPL/daily`: returned warehouse daily OHLCV.
+- `GET http://localhost:8080/api/stocks/analytics/top-gainers`: returned warehouse movers.
+- `GET http://localhost:8080/api/stocks/analytics/top-losers`: returned warehouse movers.
+- `GET http://localhost:8080/api/stocks/analytics/high-volume`: returned warehouse volume ranking.
+
+## 2026-06-20 - Phase 7 AI Prediction MVP
+
+### Completed
+
+- Added `ai-service/` as a separate FastAPI prediction service.
+- Added baseline `moving_average_baseline` model logic:
+  - Reads recent daily close prices from PostgreSQL DW.
+  - Predicts next target date close price.
+  - Computes a simple confidence score from recent volatility.
+  - Upserts results into `fact_stock_predictions`.
+- Added gateway route `/predict/*` to `ai_service`.
+- Added Docker Compose service `ai_service`.
+- Added prediction unique index to PostgreSQL warehouse schema.
+- Added backend endpoint `GET /api/stocks/{symbol}/predictions`.
+- Added frontend prediction panel on the realtime dashboard.
+- Updated README and `.env.example`.
+
+### Verification
+
+- `python -m py_compile` for `ai-service` and backend prediction changes: passed.
+- `docker compose config --quiet`: passed.
+- `docker compose up --build -d ai_service backend gateway frontend`: passed.
+- `GET http://localhost:8100/health`: returned AI service health.
+- `POST http://localhost:8080/predict/run-all`: returned predictions for `AAPL`, `MSFT`, and `NVDA`.
+- `POST http://localhost:8080/predict/AAPL`: returned an `AAPL` prediction.
+- `GET http://localhost:8080/api/stocks/AAPL/predictions`: returned prediction from PostgreSQL DW.
+- `docker compose exec frontend npm run build`: passed.
+- Recreated `frontend` and `gateway` after build to restore Next dev mode cache.
+
+## 2026-06-20 - Dashboard Pages and Expanded Symbols
+
+### Completed
+
+- Refined the frontend using the referenced UI as inspiration while keeping the code original.
+- Converted the dashboard header navigation into real client-side views:
+  - Home.
+  - Stocks.
+  - News.
+  - Analysis.
+- Added a stock-board view with filter controls and table columns for ceiling, floor, ref, match price, volume, change, high, low and prediction direction.
+- Added a news view with filter chips, stacked article cards and a news statistics panel.
+- Added an analysis view with market breadth, prediction distribution and ranked signal bars.
+- Expanded seed symbols with VN-style demo symbols:
+  - `VIC`, `VHM`, `BMP`, `VJC`, `FRT`, `ACB`, `BCM`, `BID`, `CTG`, `DGC`, `FPT`, `GAS`, `GVR`, `HDB`, `HPG`, `LPB`, `MBB`, `MSN`, `MWG`, `PLX`, `SAB`, `SHB`, `SSB`.
+  - Kept `AAPL`, `MSFT`, `NVDA`.
+- Updated Docker Compose and `.env.example` default `STOCK_SYMBOLS`.
+- Expanded backend fallback seed stocks.
+- Applied `warehouse/init/002_seed_data.sql` to the running PostgreSQL container.
+
+### Verification
+
+- `python -m py_compile api-service/app/api/routes/stocks.py`: passed.
+- `docker compose exec frontend npm run build`: passed.
+- Recreated `frontend` and `gateway` after build.
+- Rebuilt/restarted backend and symbol-driven services.
+- `GET http://localhost:8080/api/stocks`: returned 26 symbols.
+- `GET http://localhost:8080`: returned 200.
+- Next static assets from `/_next/static/*`: returned 200.
+
+## 2026-06-21 - Streaming-only UI and Tailwind Cleanup
+
+### Completed
+
+- Removed ScyllaDB latest price seed statements from `scylla-service/init/001_online_store.cql`.
+- Added backend streaming latest endpoint:
+  - `GET /api/stocks/latest`.
+- Removed backend stock fallback seed usage from stock routes.
+- Updated market summary to use ScyllaDB streaming latest rows instead of seeded/fallback symbols.
+- Refactored the realtime dashboard toward a Tailwind-based user-facing UI:
+  - Removed frontend-generated fake board values.
+  - Stock board now derives price/change/high/low/volume from live latest and OHLCV history.
+  - Symbols without stream data show a waiting state.
+  - Kept Home, Stocks, News and Analysis as real client-side views.
+- Added `web-stock-ai/.dockerignore` so Docker builds do not send `.next` or `node_modules`.
+- Fixed Docker Compose gateway dependency on `ai_service` so Nginx does not fail when `/predict` upstream is configured.
+- Restored `app/page.tsx` to fetch initial dashboard data server-side.
+
+### Verification
+
+- `python -m py_compile` for backend stock routes and Scylla price repository: passed.
+- `docker compose up --build -d backend frontend gateway stock_producer stream_processor`: passed.
+- Stream processor logs showed live events processed from Kafka into ScyllaDB.
+- `GET http://localhost:8080/api/stocks/latest`: returned latest rows with `source=mock-producer`.
+- `docker compose exec frontend npm run build`: passed.
+- Recreated `frontend` and `gateway` after build to restore Next dev mode cache.
+- `GET http://localhost:8080`: returned 200.
+- Next static assets from `/_next/static/*`: returned 200.

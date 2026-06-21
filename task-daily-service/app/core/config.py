@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     news_scrape_interval_seconds: int = 300
     news_etl_interval_seconds: int = 300
     news_etl_start_delay_seconds: int = 10
+    stock_etl_interval_seconds: int = 300
+    stock_etl_start_delay_seconds: int = 15
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432

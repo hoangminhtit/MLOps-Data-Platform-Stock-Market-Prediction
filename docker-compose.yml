@@ -5,6 +5,7 @@ services:
     depends_on:
       - backend
       - frontend
+      - ai_service
     ports:
       - "${GATEWAY_PORT:-8080}:80"
     volumes:
@@ -76,7 +77,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_RAW_STOCK_TOPIC: ${KAFKA_RAW_STOCK_TOPIC:-raw_stock_events}
       KAFKA_NUM_PARTITIONS: ${KAFKA_NUM_PARTITIONS:-3}
-      STOCK_SYMBOLS: ${STOCK_SYMBOLS:-AAPL,MSFT,NVDA}
+      STOCK_SYMBOLS: ${STOCK_SYMBOLS:-VIC,VHM,BMP,VJC,FRT,ACB,BCM,BID,CTG,DGC,FPT,GAS,GVR,HDB,HPG,LPB,MBB,MSN,MWG,PLX,SAB,SHB,SSB,AAPL,MSFT,NVDA}
       PRODUCER_INTERVAL_SECONDS: ${PRODUCER_INTERVAL_SECONDS:-2}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_DIR: /app/logs
@@ -120,7 +121,7 @@ services:
     container_name: stock_news_scraper
     command: ["python", "-m", "app.scraper.news_scraper"]
     environment:
-      STOCK_SYMBOLS: ${STOCK_SYMBOLS:-AAPL,MSFT,NVDA}
+      STOCK_SYMBOLS: ${STOCK_SYMBOLS:-VIC,VHM,BMP,VJC,FRT,ACB,BCM,BID,CTG,DGC,FPT,GAS,GVR,HDB,HPG,LPB,MBB,MSN,MWG,PLX,SAB,SHB,SSB,AAPL,MSFT,NVDA}
       NEWS_SOURCES: ${NEWS_SOURCES:-mock_market_news}
       NEWS_SCRAPE_INTERVAL_SECONDS: ${NEWS_SCRAPE_INTERVAL_SECONDS:-300}
       SCYLLA_HOSTS: scylla
@@ -165,6 +166,60 @@ services:
       scylla_schema_init:
         condition: service_completed_successfully
       news_scraper:
+        condition: service_started
+    networks:
+      - stock_platform
+
+  stock_price_etl:
+    build:
+      context: ./task-daily-service
+    container_name: stock_price_etl
+    command: ["python", "-m", "app.etl.stock_prices_to_warehouse"]
+    environment:
+      STOCK_SYMBOLS: ${STOCK_SYMBOLS:-VIC,VHM,BMP,VJC,FRT,ACB,BCM,BID,CTG,DGC,FPT,GAS,GVR,HDB,HPG,LPB,MBB,MSN,MWG,PLX,SAB,SHB,SSB,AAPL,MSFT,NVDA}
+      STOCK_ETL_INTERVAL_SECONDS: ${STOCK_ETL_INTERVAL_SECONDS:-300}
+      STOCK_ETL_START_DELAY_SECONDS: ${STOCK_ETL_START_DELAY_SECONDS:-15}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-stock_dw}
+      POSTGRES_USER: ${POSTGRES_USER:-stock_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stock_password}
+      SCYLLA_HOSTS: scylla
+      SCYLLA_KEYSPACE: ${SCYLLA_KEYSPACE:-stock_online_store}
+      SCYLLA_LOCAL_DC: ${SCYLLA_LOCAL_DC:-datacenter1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: /app/logs
+      LOG_FILE_NAME: stock_etl.log
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_started
+      scylla_schema_init:
+        condition: service_completed_successfully
+      stream_processor:
+        condition: service_started
+    networks:
+      - stock_platform
+
+  ai_service:
+    build:
+      context: ./ai-service
+    container_name: stock_ai_service
+    environment:
+      STOCK_SYMBOLS: ${STOCK_SYMBOLS:-VIC,VHM,BMP,VJC,FRT,ACB,BCM,BID,CTG,DGC,FPT,GAS,GVR,HDB,HPG,LPB,MBB,MSN,MWG,PLX,SAB,SHB,SSB,AAPL,MSFT,NVDA}
+      PREDICTION_WINDOW_DAYS: ${PREDICTION_WINDOW_DAYS:-5}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-stock_dw}
+      POSTGRES_USER: ${POSTGRES_USER:-stock_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stock_password}
+    ports:
+      - "${AI_SERVICE_PORT:-8100}:8100"
+    depends_on:
+      postgres:
+        condition: service_started
+      stock_price_etl:
         condition: service_started
     networks:
       - stock_platform

@@ -29,6 +29,29 @@ def get_latest_price(symbol: str) -> dict[str, object] | None:
         return None
 
 
+def list_latest_prices(limit: int = 200) -> list[dict[str, object]]:
+    query = """
+        SELECT symbol, price, volume, event_time, source
+        FROM stock_latest_prices
+        LIMIT %s
+    """
+    try:
+        rows = execute(query, (limit,))
+        return [
+            {
+                "symbol": row.symbol,
+                "price": row.price,
+                "volume": row.volume,
+                "event_time": row.event_time.isoformat() if row.event_time else None,
+                "source": row.source,
+            }
+            for row in rows
+        ]
+    except Exception:
+        logger.exception("Failed to list latest prices from ScyllaDB")
+        return []
+
+
 def get_intraday_bars(symbol: str, event_date: date, limit: int = 120) -> list[dict[str, object]]:
     query = """
         SELECT symbol, event_date, window_start, window_end,
