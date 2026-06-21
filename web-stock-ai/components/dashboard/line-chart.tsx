@@ -3,23 +3,34 @@
 import type { IntradayBar } from "@/types/market";
 
 function formatPrice(value: number) {
-  return value >= 1000
-    ? `${(value / 1000).toFixed(1)}K`
-    : value.toFixed(2);
+  return value >= 1000 ? `${(value / 1000).toFixed(1)}K` : value.toFixed(2);
 }
 
-export function LineChart({ bars }: { bars: IntradayBar[] }) {
+export function LineChart({ bars, latestPrice }: { bars: IntradayBar[]; latestPrice?: number | null }) {
   if (bars.length === 0) {
     return (
       <div className="h-64 flex flex-col items-center justify-center gap-3">
-        <div className="w-12 h-12 rounded-full border-2 border-[var(--color-border-accent)] border-t-[var(--color-accent)] animate-spin" />
-        <p className="text-sm text-[var(--color-text-muted)]">Đang chờ dữ liệu intraday...</p>
+        <div className="w-12 h-12 rounded-full border-2 border-border-accent border-t-accent animate-spin" />
+        <p className="text-sm text-text-muted">Waiting for intraday stream...</p>
       </div>
     );
   }
 
   const sorted = [...bars].reverse();
-  const closes = sorted.map((b) => b.close_price);
+  if (latestPrice != null) {
+    const last = sorted[sorted.length - 1];
+    if (!last || Math.abs(last.close_price - latestPrice) > 0.001) {
+      sorted.push({
+        ...(last ?? bars[0]),
+        close_price: latestPrice,
+        high_price: Math.max(last?.high_price ?? latestPrice, latestPrice),
+        low_price: Math.min(last?.low_price ?? latestPrice, latestPrice),
+        open_price: last?.close_price ?? latestPrice,
+        window_start: new Date().toISOString(),
+      });
+    }
+  }
+  const closes = sorted.map((bar) => bar.close_price);
   const minV = Math.min(...closes);
   const maxV = Math.max(...closes);
   const span = maxV - minV || 1;
@@ -33,15 +44,16 @@ export function LineChart({ bars }: { bars: IntradayBar[] }) {
   const chartW = W - PL - PR;
   const chartH = H - PT - PB;
 
-  function xPos(i: number) {
-    return PL + (i / (sorted.length - 1)) * chartW;
+  function xPos(index: number) {
+    return PL + (index / Math.max(sorted.length - 1, 1)) * chartW;
   }
-  function yPos(v: number) {
-    return PT + chartH - ((v - minV) / span) * chartH;
+
+  function yPos(value: number) {
+    return PT + chartH - ((value - minV) / span) * chartH;
   }
 
   const linePath = sorted
-    .map((b, i) => `${i === 0 ? "M" : "L"} ${xPos(i).toFixed(1)} ${yPos(b.close_price).toFixed(1)}`)
+    .map((bar, index) => `${index === 0 ? "M" : "L"} ${xPos(index).toFixed(1)} ${yPos(bar.close_price).toFixed(1)}`)
     .join(" ");
 
   const areaPath =
@@ -53,51 +65,37 @@ export function LineChart({ bars }: { bars: IntradayBar[] }) {
   const isPositive = lastClose >= firstClose;
   const color = isPositive ? "#10b981" : "#ef4444";
 
-  const labelCount = 5;
-  const yLabels = Array.from({ length: labelCount }, (_, i) => {
-    const val = minV + (span / (labelCount - 1)) * i;
+  const yLabels = Array.from({ length: 5 }, (_, index) => {
+    const val = minV + (span / 4) * index;
     return { val, y: yPos(val) };
   }).reverse();
 
   const xLabelStep = Math.max(1, Math.floor(sorted.length / 6));
   const xLabels = sorted
-    .filter((_, i) => i === 0 || i === sorted.length - 1 || i % xLabelStep === 0)
-    .map((b, _, arr) => {
-      const idx = sorted.indexOf(b);
+    .filter((_, index) => index === 0 || index === sorted.length - 1 || index % xLabelStep === 0)
+    .map((bar) => {
+      const index = sorted.indexOf(bar);
       return {
-        x: xPos(idx),
-        label: b.window_start ? new Date(b.window_start).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "",
+        x: xPos(index),
+        label: bar.window_start ? new Date(bar.window_start).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "",
       };
     });
 
   return (
     <div className="w-full">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full rounded-xl"
-        style={{ height: "220px" }}
-        aria-label="Intraday price chart"
-      >
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-xl" style={{ height: "220px" }} aria-label="Intraday price chart">
         <defs>
           <linearGradient id="chart-area-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+            <stop offset="0%" stopColor={color} stopOpacity="0.2" />
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
-          {/* Background grid */}
-          <pattern id="chart-grid" x="0" y={PT} width={chartW / 5} height={chartH / 4} patternUnits="userSpaceOnUse" patternTransform={`translate(${PL},0)`}>
-            <line x1="0" y1="0" x2={chartW / 5} y2="0" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
-          </pattern>
         </defs>
 
-        {/* Grid lines */}
-        {yLabels.map(({ y }, i) => (
-          <line key={i} x1={PL} y1={y} x2={W - PR} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
+        {yLabels.map(({ y }, index) => (
+          <line key={index} x1={PL} y1={y} x2={W - PR} y2={y} stroke="rgba(15,23,42,0.08)" strokeWidth="0.5" />
         ))}
 
-        {/* Area fill */}
         <path d={areaPath} fill="url(#chart-area-grad)" />
-
-        {/* Price line */}
         <path
           d={linePath}
           fill="none"
@@ -108,44 +106,35 @@ export function LineChart({ bars }: { bars: IntradayBar[] }) {
           vectorEffect="non-scaling-stroke"
         />
 
-        {/* Latest price dot */}
-        {sorted.length > 0 && (
-          <circle
-            cx={xPos(sorted.length - 1)}
-            cy={yPos(lastClose)}
-            r="4"
-            fill={color}
-            stroke="rgba(8,12,20,0.9)"
-            strokeWidth="2"
-          />
-        )}
+        <circle cx={xPos(sorted.length - 1)} cy={yPos(lastClose)} r="4" fill={color} stroke="rgba(255,255,255,0.92)" strokeWidth="2" />
 
-        {/* Y axis labels */}
-        {yLabels.map(({ val, y }, i) => (
-          <text key={i} x={PL - 6} y={y + 4} textAnchor="end" fontSize="10" fill="rgba(148,163,184,0.8)" fontFamily="monospace">
+        {yLabels.map(({ val, y }, index) => (
+          <text key={index} x={PL - 6} y={y + 4} textAnchor="end" fontSize="10" fill="rgba(82,97,115,0.9)" fontFamily="monospace">
             {formatPrice(val)}
           </text>
         ))}
 
-        {/* X axis labels */}
-        {xLabels.map(({ x, label }, i) => (
-          <text key={i} x={x} y={H - 6} textAnchor="middle" fontSize="9" fill="rgba(148,163,184,0.7)" fontFamily="monospace">
+        {xLabels.map(({ x, label }, index) => (
+          <text key={index} x={x} y={H - 6} textAnchor="middle" fontSize="9" fill="rgba(82,97,115,0.75)" fontFamily="monospace">
             {label}
           </text>
         ))}
 
-        {/* Axes */}
-        <line x1={PL} y1={PT} x2={PL} y2={PT + chartH} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-        <line x1={PL} y1={PT + chartH} x2={W - PR} y2={PT + chartH} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+        <line x1={PL} y1={PT} x2={PL} y2={PT + chartH} stroke="rgba(15,23,42,0.12)" strokeWidth="1" />
+        <line x1={PL} y1={PT + chartH} x2={W - PR} y2={PT + chartH} stroke="rgba(15,23,42,0.12)" strokeWidth="1" />
       </svg>
 
-      <div className="flex items-center justify-between mt-3 text-xs text-[var(--color-text-muted)]">
-        <span>{sorted.length} nến 1 phút</span>
+      <div className="flex items-center justify-between mt-3 text-xs text-text-muted">
+        <span>{bars.length} one-minute bars + live price</span>
         <div className="flex items-center gap-3">
-          <span>Min: <span className="font-mono text-[var(--color-text-secondary)]">{formatPrice(minV)}</span></span>
-          <span>Max: <span className="font-mono text-[var(--color-text-secondary)]">{formatPrice(maxV)}</span></span>
-          <span className={`font-mono font-bold ${isPositive ? "text-[var(--color-up)]" : "text-[var(--color-down)]"}`}>
-            {isPositive ? "▲" : "▼"} {formatPrice(lastClose)}
+          <span>
+            Min: <span className="font-mono text-text-secondary">{formatPrice(minV)}</span>
+          </span>
+          <span>
+            Max: <span className="font-mono text-text-secondary">{formatPrice(maxV)}</span>
+          </span>
+          <span className={`font-mono font-bold ${isPositive ? "text-up" : "text-down"}`}>
+            Intraday trend: {isPositive ? "UP" : "DOWN"} {formatPrice(lastClose)}
           </span>
         </div>
       </div>

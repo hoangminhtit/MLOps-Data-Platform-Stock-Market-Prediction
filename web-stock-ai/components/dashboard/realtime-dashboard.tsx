@@ -31,10 +31,6 @@ import type {
 type PriceHistory = Record<string, number[]>;
 type LatestBySymbol = Record<string, LatestPrice | undefined>;
 
-function pricesFromBars(bars: IntradayBar[]) {
-  return [...bars].reverse().map((bar) => bar.close_price).slice(-40);
-}
-
 function appendPrice(history: number[], price: number | null) {
   if (price == null) return history;
   return [...history, price].slice(-40);
@@ -52,6 +48,13 @@ function sortDisplayStocks(stocks: Stock[]) {
 function latestMap(items: LatestPrice[]) {
   return items.reduce<LatestBySymbol>((acc, item) => {
     acc[item.symbol] = item;
+    return acc;
+  }, {});
+}
+
+function initialHistoryFromLatest(items: LatestPrice[]) {
+  return items.reduce<PriceHistory>((acc, item) => {
+    if (item.price != null) acc[item.symbol] = [item.price];
     return acc;
   }, {});
 }
@@ -83,7 +86,7 @@ export default function RealtimeDashboard({ initialData }: { initialData: Initia
   const [selectedSymbol, setSelectedSymbol] = useState(sortedInitialStocks[0]?.symbol ?? "VIC");
   const [activeView, setActiveView] = useState<DashboardView>("Home");
   const [latestBySymbol, setLatestBySymbol] = useState<LatestBySymbol>(() => latestMap(initialData.latestPrices));
-  const [priceHistory, setPriceHistory] = useState<PriceHistory>({});
+  const [priceHistory, setPriceHistory] = useState<PriceHistory>(() => initialHistoryFromLatest(initialData.latestPrices));
   const [summary, setSummary] = useState<MarketSummary | null>(initialData.summary);
   const [news, setNews] = useState<StockNews[]>(initialData.news);
   const [predictions, setPredictions] = useState<StockPrediction[]>(initialData.predictions);
@@ -92,14 +95,6 @@ export default function RealtimeDashboard({ initialData }: { initialData: Initia
   const [refreshKey, setRefreshKey] = useState(0);
   const [search, setSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState("All Sectors");
-
-  useEffect(() => {
-    if (initialData.intraday.length === 0) return;
-    setPriceHistory((current) => ({
-      ...current,
-      [selectedSymbol]: pricesFromBars(initialData.intraday),
-    }));
-  }, [initialData.intraday, selectedSymbol]);
 
   useEffect(() => {
     let active = true;
@@ -115,15 +110,21 @@ export default function RealtimeDashboard({ initialData }: { initialData: Initia
 
       if (!active) return;
       if (latestResponse.ok) {
-        const items = (await latestResponse.json()).items ?? [];
+        const items = ((await latestResponse.json()).items ?? []) as LatestPrice[];
         setLatestBySymbol((current) => ({ ...current, ...latestMap(items) }));
+        setPriceHistory((current) => {
+          const next = { ...current };
+          for (const item of items) {
+            next[item.symbol] = appendPrice(next[item.symbol] ?? [], item.price);
+          }
+          return next;
+        });
       }
       if (newsResponse.ok) setNews((await newsResponse.json()).items ?? []);
       if (predictionsResponse.ok) setPredictions((await predictionsResponse.json()).items ?? []);
       if (intradayResponse.ok) {
         const items = (await intradayResponse.json()).items ?? [];
         setIntraday(items);
-        setPriceHistory((current) => ({ ...current, [selectedSymbol]: pricesFromBars(items) }));
       }
       if (summaryResponse.ok) setSummary(await summaryResponse.json());
     }
@@ -196,11 +197,11 @@ export default function RealtimeDashboard({ initialData }: { initialData: Initia
               <Activity size={14} />
               {activeView === "Home" ? "Realtime market" : activeView}
             </div>
-            <h1 className="max-w-3xl text-4xl font-black tracking-tight text-white sm:text-5xl">
+            <h1 className="max-w-3xl text-4xl font-black tracking-tight text-text-primary sm:text-5xl">
               {activeView === "News"
                 ? "Market News"
-                : activeView === "Analysis"
-                  ? "Market Analysis"
+                : activeView === "Analytics"
+                  ? "Market Analytics"
                   : activeView === "Stocks"
                     ? "Live Stock Board"
                     : "StockAI Realtime Trading Intelligence"}
@@ -215,7 +216,7 @@ export default function RealtimeDashboard({ initialData }: { initialData: Initia
             <label className="glass flex h-12 items-center gap-3 rounded-xl px-4">
               <Search size={18} className="text-text-secondary" />
               <input
-                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-text-muted"
+                className="w-full bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search symbol, company, sector..."
                 value={search}
@@ -268,8 +269,8 @@ export default function RealtimeDashboard({ initialData }: { initialData: Initia
 
       {activeView === "News" ? <NewsView news={news} sectors={sectors} selectedStock={selectedStock} selectedSymbol={selectedSymbol} /> : null}
 
-      {activeView === "Analysis" ? (
-        <AnalysisView
+      {activeView === "Analytics" ? (
+        <AnalyticsView
           averageChange={averageChange}
           bearish={bearish}
           bullish={bullish}
@@ -332,15 +333,15 @@ function HomeView({
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-accent">{selectedSymbol}</p>
-              <h2 className="mt-1 text-xl font-black text-white">{selectedStock?.name ?? "Streaming symbol"}</h2>
+              <h2 className="mt-1 text-xl font-black text-text-primary">{selectedStock?.name ?? "Streaming symbol"}</h2>
               <p className="mt-1 text-sm text-text-secondary">{selectedStock?.industry ?? "Waiting for metadata"}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-text-muted">Latest price</p>
-              <p className="mt-1 font-mono text-2xl font-black text-white">{formatNullablePrice(latest?.price)}</p>
+              <p className="mt-1 font-mono text-2xl font-black text-text-primary">{formatNullablePrice(latest?.price)}</p>
             </div>
           </div>
-          <LineChart bars={intraday} />
+          <LineChart bars={intraday} latestPrice={latest?.price} />
         </div>
 
         <aside className="grid gap-4">
@@ -349,7 +350,7 @@ function HomeView({
           <div className="glass rounded-2xl p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-black text-white">Prediction</h3>
+                <h3 className="font-black text-text-primary">Prediction</h3>
                 <p className="text-xs text-text-secondary">from warehouse baseline</p>
               </div>
               <BrainCircuit className="text-accent" size={20} />
@@ -357,7 +358,7 @@ function HomeView({
             {prediction ? (
               <div className="mt-5">
                 <p className="text-xs text-text-muted">Target {prediction.target_date}</p>
-                <p className="mt-1 font-mono text-3xl font-black text-white">{formatNullablePrice(prediction.predicted_close)}</p>
+                <p className="mt-1 font-mono text-3xl font-black text-text-primary">{formatNullablePrice(prediction.predicted_close)}</p>
                 <p className="mt-2 text-xs text-text-secondary">
                   confidence {prediction.confidence == null ? "--" : `${Math.round(prediction.confidence * 100)}%`}
                 </p>
@@ -372,7 +373,7 @@ function HomeView({
       <div className="glass rounded-2xl p-5">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="font-black text-white">Latest warehouse news</h2>
+            <h2 className="font-black text-text-primary">Latest warehouse news</h2>
             <p className="text-sm text-text-secondary">News is shown only when loaded by batch pipeline.</p>
           </div>
           <Newspaper className="text-accent" size={20} />
@@ -406,7 +407,7 @@ function StocksView({
           </span>
         </div>
         <select
-          className="h-10 rounded-xl border border-border-default bg-bg-card px-3 text-sm font-bold text-white outline-none"
+          className="h-10 rounded-xl border border-border-default bg-bg-card px-3 text-sm font-bold text-text-primary outline-none"
           value={sectorFilter}
           onChange={(event) => setSectorFilter(event.target.value)}
         >
@@ -442,11 +443,11 @@ function StocksView({
                     onClick={() => setSelectedSymbol(row.stock.symbol)}
                   >
                     <td className="px-4 py-3">
-                      <div className="font-black text-white">{row.stock.symbol}</div>
+                      <div className="font-black text-text-primary">{row.stock.symbol}</div>
                       <div className="text-xs text-text-muted">{row.stock.name ?? row.stock.exchange}</div>
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-text-secondary">{formatNullablePrice(row.ref)}</td>
-                    <td className="px-4 py-3 text-right font-mono font-black text-white">{formatNullablePrice(row.price)}</td>
+                    <td className="px-4 py-3 text-right font-mono font-black text-text-primary">{formatNullablePrice(row.price)}</td>
                     <td className={`px-4 py-3 text-right font-mono font-bold ${positive ? "text-up" : "text-down"}`}>{formatSigned(row.change)}</td>
                     <td className={`px-4 py-3 text-right font-mono font-bold ${positive ? "text-up" : "text-down"}`}>
                       {row.percent == null ? "--" : `${row.percent >= 0 ? "+" : ""}${row.percent.toFixed(2)}%`}
@@ -497,10 +498,10 @@ function NewsView({
         <NewsList news={news} selectedSymbol={selectedSymbol} />
       </div>
       <aside className="glass h-fit rounded-2xl p-5">
-        <h2 className="font-black text-white">News coverage</h2>
+        <h2 className="font-black text-text-primary">News coverage</h2>
         <p className="mt-1 text-sm text-text-secondary">{selectedStock?.name ?? selectedSymbol}</p>
         <div className="mt-6 grid place-items-center rounded-2xl border border-border-default bg-bg-surface p-8">
-          <div className="grid h-32 w-32 place-items-center rounded-full border-[18px] border-accent text-2xl font-black text-white">
+          <div className="grid h-32 w-32 place-items-center rounded-full border-[18px] border-accent text-2xl font-black text-text-primary">
             {news.length}
           </div>
         </div>
@@ -509,7 +510,7 @@ function NewsView({
   );
 }
 
-function AnalysisView({
+function AnalyticsView({
   averageChange,
   bearish,
   bullish,
@@ -541,7 +542,7 @@ function AnalysisView({
           <div className="mb-5 flex items-center justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-accent">Market breadth</p>
-              <h2 className="mt-1 text-xl font-black text-white">Live direction</h2>
+              <h2 className="mt-1 text-xl font-black text-text-primary">Live direction</h2>
             </div>
             <BarChart3 className="text-accent" />
           </div>
@@ -556,7 +557,7 @@ function AnalysisView({
           <div className="mb-5 flex items-center justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-accent">Liquidity</p>
-              <h2 className="mt-1 text-xl font-black text-white">Streaming volume leaders</h2>
+              <h2 className="mt-1 text-xl font-black text-text-primary">Streaming volume leaders</h2>
             </div>
             <Database className="text-accent" />
           </div>
@@ -566,7 +567,7 @@ function AnalysisView({
               .slice(0, 8)
               .map((row) => (
                 <div className="grid grid-cols-[56px_1fr_auto] items-center gap-3" key={row.stock.symbol}>
-                  <span className="font-black text-white">{row.stock.symbol}</span>
+                  <span className="font-black text-text-primary">{row.stock.symbol}</span>
                   <div className="h-2 overflow-hidden rounded-full bg-bg-elevated">
                     <div
                       className="h-full rounded-full bg-accent"
@@ -584,7 +585,7 @@ function AnalysisView({
 }
 
 function MetricCard({ label, value, sub, tone }: { label: string; value: string | number; sub: string; tone?: "accent" | "up" | "down" }) {
-  const toneClass = tone === "up" ? "text-up" : tone === "down" ? "text-down" : tone === "accent" ? "text-accent" : "text-white";
+  const toneClass = tone === "up" ? "text-up" : tone === "down" ? "text-down" : tone === "accent" ? "text-accent" : "text-text-primary";
   return (
     <div className="glass rounded-2xl p-5">
       <p className="text-xs font-bold uppercase tracking-wide text-text-muted">{label}</p>
@@ -600,7 +601,7 @@ function DirectionBar({ label, value, total, tone }: { label: string; value: num
   return (
     <div>
       <div className="mb-2 flex justify-between text-sm">
-        <span className="font-bold text-white">{label}</span>
+        <span className="font-bold text-text-primary">{label}</span>
         <span className="font-mono text-text-secondary">{value}</span>
       </div>
       <div className="h-3 overflow-hidden rounded-full bg-bg-elevated">
@@ -631,7 +632,7 @@ function NewsList({ news, selectedSymbol, compact = false }: { news: StockNews[]
             <span className="rounded-full bg-accent-soft px-2 py-1 text-xs font-black text-accent">{item.symbol}</span>
             <span className="text-xs text-text-muted">{item.published_at ? formatTime(item.published_at) : "--"}</span>
           </div>
-          <h3 className="font-bold leading-snug text-white">{item.title}</h3>
+          <h3 className="font-bold leading-snug text-text-primary">{item.title}</h3>
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-secondary">{item.content}</p>
         </article>
       ))}

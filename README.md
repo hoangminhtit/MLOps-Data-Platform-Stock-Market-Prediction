@@ -333,6 +333,30 @@ docker compose up --build
 
 Lệnh trên xóa volumes Docker của project, chỉ dùng khi muốn reset dữ liệu local.
 
+## Frontend Dashboard
+
+Run or refresh the Next.js frontend through the gateway:
+
+```bash
+docker compose up --build -d frontend gateway
+```
+
+Open:
+
+```text
+http://localhost:8080
+```
+
+The dashboard uses English navigation: `Home`, `Stocks`, `News`, `Analytics`.
+Price cards and the stock board read from ScyllaDB streaming latest rows through `GET /api/stocks/latest`.
+Mini charts are built from live updates accumulated in the browser, so symbols start with a waiting state and draw sparklines after streaming ticks arrive.
+
+For production-style verification, run the build in a one-off container instead of the live dev container:
+
+```bash
+docker compose run --rm frontend npm run build
+```
+
 ## Verification Status
 
 Đã kiểm tra:

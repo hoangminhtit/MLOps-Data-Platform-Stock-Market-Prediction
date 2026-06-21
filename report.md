@@ -239,6 +239,50 @@
 - `GET http://localhost:8080`: returned 200.
 - Next static assets from `/_next/static/*`: returned 200.
 
+## 2026-06-21 - Light Theme and Live Symbol Charts
+
+### Completed
+
+- Switched the Next.js dashboard from a dark palette to a lighter Tailwind token theme.
+- Replaced hard-coded dark UI text colors with semantic theme colors so cards, tables, controls and charts work on the light background.
+- Renamed the main navigation to English:
+  - Home.
+  - Stocks.
+  - News.
+  - Analytics.
+- Updated dashboard data wiring so `GET /api/stocks/latest` updates both latest prices and per-symbol price history.
+- Stock widgets now build mini charts for every streaming symbol after live ticks arrive, not only the selected symbol.
+- Stock board rows continue to read latest price and volume from ScyllaDB streaming rows.
+- Cleaned frontend text/metadata to English and removed prior mojibake strings from the active UI components.
+- Updated README with the current frontend run/build instructions.
+
+### Verification
+
+- `python -m py_compile api-service/app/api/routes/stocks.py api-service/app/repositories/scylla_prices.py`: passed.
+- `docker compose config --quiet`: passed.
+- `docker compose run --rm frontend npm run build`: passed.
+- `npm run build` in `web-stock-ai`: passed after running outside the sandbox because local Windows spawn was blocked.
+- `docker compose up --build -d frontend gateway`: passed.
+- `GET http://localhost:8080`: returned 200.
+- `GET http://localhost:8080/api/stocks/latest`: returned streaming rows with `source=mock-producer`.
+- Next static asset through the gateway returned 200.
+- Rendered HTML contains `lang="en"` and English navigation labels.
+
+## 2026-06-21 - Sparkline Scale Adjustment
+
+### Completed
+
+- Fixed stock-card sparklines that looked overly zoomed because each card scaled the line directly from its local min/max.
+- Added a minimum visible price range around the anchor price so tiny moves, for example `+0.03%`, render as subtle movement instead of a full-height ramp.
+- Kept the detailed intraday chart separate from card sparkline history, so clicking a symbol no longer replaces the card's live mini-chart with a differently scaled intraday series.
+
+### Verification
+
+- `npm run build` in `web-stock-ai`: passed.
+- `docker compose up --build -d frontend gateway`: passed.
+- `GET http://localhost:8080`: returned 200.
+- `GET http://localhost:8080/api/stocks/latest`: returned 200.
+
 ## 2026-06-20 - Phase 6 Batch ETL Warehouse
 
 ### Completed
