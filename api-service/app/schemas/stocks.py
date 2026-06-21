@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -66,3 +66,14 @@ class HighVolumeStock(BaseModel):
     name: str | None = None
     close_price: float | None = None
     volume: int | None = None
+
+
+class StockPrediction(BaseModel):
+    symbol: str
+    prediction_date: date
+    target_date: date
+    predicted_close: float | None = None
+    confidence: float | None = None
+    model_name: str | None = None
+    model_version: str | None = None
+    created_at: datetime | None = None

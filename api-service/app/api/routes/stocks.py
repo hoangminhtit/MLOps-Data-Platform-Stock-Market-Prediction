@@ -6,38 +6,28 @@ from app.repositories.postgres_news import list_stock_news
 from app.repositories.postgres_analytics import (
     list_daily_prices,
     list_high_volume,
+    list_predictions,
     list_top_movers,
 )
 from app.repositories.postgres_stocks import get_stock, list_stocks as list_stocks_from_dw
 from app.repositories.scylla_prices import (
     get_intraday_bars,
     get_latest_price as get_latest_price_from_online_store,
+    list_latest_prices,
 )
-from app.schemas.stocks import DailyPrice, HighVolumeStock, IntradayBar, LatestPrice, StockMover, StockNews, StockSummary
+from app.schemas.stocks import DailyPrice, HighVolumeStock, IntradayBar, LatestPrice, StockMover, StockNews, StockPrediction, StockSummary
 
 router = APIRouter()
-
-SEED_STOCKS = [
-    {"symbol": "AAPL", "name": "Apple Inc.", "exchange": "NASDAQ", "sector": "Technology", "industry": "Consumer Electronics"},
-    {"symbol": "MSFT", "name": "Microsoft Corporation", "exchange": "NASDAQ", "sector": "Technology", "industry": "Software"},
-    {"symbol": "NVDA", "name": "NVIDIA Corporation", "exchange": "NASDAQ", "sector": "Technology", "industry": "Semiconductors"},
-]
 
 
 @router.get("/analytics/market-summary")
 async def get_market_summary() -> dict[str, object]:
     stocks = await list_stocks_from_dw()
-    universe = stocks or SEED_STOCKS
-    latest_items = []
-    for stock in universe:
-        latest = get_latest_price_from_online_store(str(stock["symbol"]))
-        if latest:
-            latest_items.append(latest)
-
+    latest_items = list_latest_prices()
     prices = [item["price"] for item in latest_items if item.get("price") is not None]
     total_volume = sum(int(item.get("volume") or 0) for item in latest_items)
     return {
-        "tracked_symbols": len(universe),
+        "tracked_symbols": len(stocks),
         "live_symbols": len(latest_items),
         "average_price": round(sum(prices) / len(prices), 2) if prices else None,
         "total_volume": total_volume,
@@ -69,7 +59,14 @@ async def get_high_volume(limit: int = 5) -> dict[str, list[HighVolumeStock]]:
 @router.get("")
 async def list_stocks() -> dict[str, list[StockSummary]]:
     stocks = await list_stocks_from_dw()
-    return {"items": stocks or SEED_STOCKS}
+    return {"items": stocks}
+
+
+@router.get("/latest")
+async def list_latest(limit: int = 200) -> dict[str, list[LatestPrice]]:
+    safe_limit = max(1, min(limit, 500))
+    latest = list_latest_prices(safe_limit)
+    return {"items": latest}
 
 
 @router.get("/{symbol}")
@@ -79,8 +76,7 @@ async def get_stock_profile(symbol: str) -> StockSummary:
         return StockSummary(**stock)
 
     symbol_upper = symbol.upper()
-    fallback = next((item for item in SEED_STOCKS if item["symbol"] == symbol_upper), None)
-    return StockSummary(**(fallback or {"symbol": symbol_upper}))
+    return StockSummary(symbol=symbol_upper)
 
 
 @router.get("/{symbol}/latest")
@@ -109,6 +105,13 @@ async def get_daily(symbol: str, limit: int = 30) -> dict[str, list[DailyPrice]]
     safe_limit = max(1, min(limit, 365))
     prices = await list_daily_prices(symbol, safe_limit)
     return {"items": prices}
+
+
+@router.get("/{symbol}/predictions")
+async def get_predictions(symbol: str, limit: int = 10) -> dict[str, list[StockPrediction]]:
+    safe_limit = max(1, min(limit, 100))
+    predictions = await list_predictions(symbol, safe_limit)
+    return {"items": predictions}
 
 
 @router.get("/{symbol}/news")

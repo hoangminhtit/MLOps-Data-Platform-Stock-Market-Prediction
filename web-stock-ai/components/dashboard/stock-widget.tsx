@@ -1,3 +1,5 @@
+"use client";
+
 import { TrendingDown, TrendingUp } from "lucide-react";
 
 import { numberFormat, priceFormat } from "@/lib/formatters";
@@ -9,12 +11,47 @@ function sparklinePath(values: number[]) {
   const max = Math.max(...values);
   const span = max - min || 1;
   return values
-    .map((value, index) => {
-      const x = (index / (values.length - 1)) * 100;
-      const y = 80 - ((value - min) / span) * 60;
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * 100;
+      const y = 80 - ((v - min) / span) * 60;
+      return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
     })
     .join(" ");
+}
+
+function SparklineArea({ values, positive }: { values: number[]; positive: boolean }) {
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values.map((v, i) => ({
+    x: (i / (values.length - 1)) * 100,
+    y: 80 - ((v - min) / span) * 60,
+  }));
+  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
+  const areaPath = linePath + ` L ${pts[pts.length - 1].x} 90 L 0 90 Z`;
+  const color = positive ? "#10b981" : "#ef4444";
+  const gradientId = `spark-${positive ? "up" : "dn"}-${Math.random().toString(36).slice(2, 7)}`;
+  return (
+    <svg className="w-full h-[56px]" viewBox="0 0 100 90" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradientId})`} />
+      <path
+        d={linePath}
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
 }
 
 export function StockWidget({
@@ -34,31 +71,61 @@ export function StockWidget({
   const last = history[history.length - 1] ?? latest?.price ?? 0;
   const changePercent = first ? ((last - first) / first) * 100 : 0;
   const positive = changePercent >= 0;
-  const path = sparklinePath(history);
+  const hasData = latest?.price != null;
 
   return (
-    <button className={active ? "stockWidget active" : "stockWidget"} onClick={onSelect}>
-      <div className="widgetTop">
+    <button
+      id={`stock-widget-${stock.symbol}`}
+      onClick={onSelect}
+      className={[
+        "glass card-hover rounded-xl p-4 flex flex-col gap-3 text-left transition-all duration-200 w-full",
+        active
+          ? "border-[var(--color-border-accent)] shadow-[0_0_0_1px_rgba(6,182,212,0.2),0_8px_32px_rgba(0,0,0,0.5)]"
+          : "border-[var(--color-border-default)]",
+      ].join(" ")}
+    >
+      <div className="flex items-start justify-between gap-2">
         <div>
-          <strong>{stock.symbol}</strong>
-          <span>{stock.exchange ?? "US"}</span>
+          <div className="font-bold text-base text-white leading-none">{stock.symbol}</div>
+          <div className="text-[10px] text-[var(--color-text-muted)] mt-1">{stock.exchange ?? "HOSE"}</div>
         </div>
-        <em>{latest?.price == null ? "--" : priceFormat.format(latest.price)}</em>
+        {hasData ? (
+          <div
+            className={[
+              "flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full",
+              positive
+                ? "bg-[var(--color-up-soft)] text-[var(--color-up)]"
+                : "bg-[var(--color-down-soft)] text-[var(--color-down)]",
+            ].join(" ")}
+          >
+            {positive ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+            {positive ? "+" : ""}{changePercent.toFixed(2)}%
+          </div>
+        ) : (
+          <div className="text-[10px] text-[var(--color-text-muted)]">Chờ data...</div>
+        )}
       </div>
 
-      <svg className="sparkline" viewBox="0 0 100 90" preserveAspectRatio="none" aria-label={`${stock.symbol} sparkline`}>
-        <path d="M 0 48 L 100 48" className="sparkRef" />
-        {path ? <path d={path} className={positive ? "sparkPath up" : "sparkPath down"} /> : null}
-        {!path ? <text x="50" y="48" textAnchor="middle">Loading</text> : null}
-      </svg>
+      {/* Sparkline */}
+      <div className="overflow-hidden rounded-lg">
+        {history.length >= 2 ? (
+          <SparklineArea values={history} positive={positive} />
+        ) : (
+          <div className="h-14 flex items-center justify-center">
+            <div className="text-[10px] text-[var(--color-text-muted)] shimmer px-3 py-1 rounded">
+              Đang nhận dữ liệu...
+            </div>
+          </div>
+        )}
+      </div>
 
-      <div className="widgetFooter">
-        <span className={positive ? "change up" : "change down"}>
-          {positive ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
-          {positive ? "+" : ""}
-          {changePercent.toFixed(2)}%
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono font-bold text-sm text-white tabular-nums">
+          {latest?.price == null ? "---" : priceFormat.format(latest.price)}
         </span>
-        <span>{numberFormat.format(latest?.volume ?? 0)}</span>
+        <span className="text-[10px] text-[var(--color-text-muted)] tabular-nums">
+          Vol {latest?.volume == null ? "---" : numberFormat.format(latest.volume)}
+        </span>
       </div>
     </button>
   );

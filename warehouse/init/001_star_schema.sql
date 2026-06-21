@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS fact_stock_predictions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fact_stock_predictions_unique_target
+ON fact_stock_predictions (stock_id, prediction_date, target_date, model_name, model_version);
+
 CREATE TABLE IF NOT EXISTS fact_technical_indicators (
     id BIGSERIAL PRIMARY KEY,
     stock_id INT NOT NULL REFERENCES dim_stock(stock_id),

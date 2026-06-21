@@ -84,3 +84,28 @@ async def list_high_volume(limit: int = 5) -> list[dict[str, object]]:
     except Exception:
         logger.exception("Failed to list high volume stocks")
         return []
+
+
+async def list_predictions(symbol: str, limit: int = 10) -> list[dict[str, object]]:
+    query = """
+        SELECT
+            s.symbol,
+            p.prediction_date,
+            p.target_date,
+            p.predicted_close,
+            p.confidence,
+            p.model_name,
+            p.model_version,
+            p.created_at
+        FROM fact_stock_predictions p
+        JOIN dim_stock s ON s.stock_id = p.stock_id
+        WHERE s.symbol = $1
+        ORDER BY p.prediction_date DESC, p.target_date DESC, p.created_at DESC
+        LIMIT $2
+    """
+    try:
+        rows = await fetch(query, symbol.upper(), limit)
+        return [dict(row) for row in rows]
+    except Exception:
+        logger.exception("Failed to list predictions for symbol=%s", symbol)
+        return []
